@@ -18,13 +18,19 @@ import androidx.navigation.navArgument
 import com.vetclinic.app.ui.components.ScreenHeader
 import com.vetclinic.app.ui.screens.auth.LoginScreen
 import com.vetclinic.app.ui.screens.auth.RegisterOwnerScreen
+import com.vetclinic.app.ui.screens.auth.SplashScreen
+import com.vetclinic.app.ui.screens.common.NotificationsScreen
 import com.vetclinic.app.ui.screens.common.ProfileScreen
 import com.vetclinic.app.ui.screens.common.SettingsScreen
+import com.vetclinic.app.ui.screens.owner.BookAppointmentScreen
 import com.vetclinic.app.ui.screens.owner.HomeScreen
 import com.vetclinic.app.ui.screens.owner.MyPetsScreen
 import com.vetclinic.app.ui.screens.owner.PetProfileScreen
+import com.vetclinic.app.ui.screens.owner.VaccinationHistoryScreen
 import com.vetclinic.app.ui.screens.veterinary.AppointmentDetailScreen
+import com.vetclinic.app.ui.screens.veterinary.DashboardScreen
 import com.vetclinic.app.ui.screens.veterinary.NewConsultationScreen
+import com.vetclinic.app.ui.screens.veterinary.OwnerDetailScreen
 import com.vetclinic.app.ui.screens.veterinary.OwnerListScreen
 import com.vetclinic.app.ui.screens.veterinary.PetListScreen
 import com.vetclinic.app.ui.screens.veterinary.VaccinationRecordScreen
@@ -47,14 +53,14 @@ object Routes {
     const val HOME = "home"
     const val MY_PETS = "my_pets"
     const val BOOK_APPOINTMENT = "book_appointment"
-    const val VACCINATION_HISTORY = "vaccination_history"
+    const val VACCINATION_HISTORY = "vaccination_history?petName={petName}"
     const val ADD_PET = "add_pet"
     const val MY_APPOINTMENTS = "my_appointments"
     const val PET_PROFILE = "pet_profile/{petName}"
     const val PET_LIST = "pet_list"
     const val NEW_CONSULTATION = "new_consultation/{petName}/{petBreed}/{ownerName}"
     const val DASHBOARD = "dashboard"
-    const val OWNER_DETAIL = "owner_detail"
+    const val OWNER_DETAIL = "owner_detail?ownerName={ownerName}"
     const val APPOINTMENT_SCHEDULE = "appointment_schedule"
     const val PET_FORM = "pet_form"
     const val APPOINTMENT_DETAIL = "appointment_detail"
@@ -65,17 +71,30 @@ object Routes {
     fun newConsultation(petName: String, petBreed: String, ownerName: String) =
         "new_consultation/${Uri.encode(petName)}/${Uri.encode(petBreed)}/${Uri.encode(ownerName)}"
     fun profile(isVet: Boolean) = "profile?isVet=$isVet"
+    fun vaccinationHistory(petName: String? = null) =
+        if (petName == null) "vaccination_history" else "vaccination_history?petName=${Uri.encode(petName)}"
+    fun ownerDetail(ownerName: String? = null) =
+        if (ownerName == null) "owner_detail" else "owner_detail?ownerName=${Uri.encode(ownerName)}"
 }
 
 private const val OWNER_START = Routes.HOME
-private const val VET_START = Routes.PET_LIST
+private const val VET_START = Routes.DASHBOARD
 
 
 @Composable
 fun AppNavigation(navController: NavHostController = rememberNavController()) {
 
-    NavHost(navController = navController, startDestination = Routes.LOGIN) {
+    NavHost(navController = navController, startDestination = Routes.SPLASH) {
 
+        composable(Routes.SPLASH) {
+            SplashScreen(
+                onFinished = {
+                    navController.navigate(Routes.LOGIN) {
+                        popUpTo(Routes.SPLASH) { inclusive = true }
+                    }
+                }
+            )
+        }
 
         composable(Routes.LOGIN) {
             LoginScreen(
@@ -122,7 +141,7 @@ fun AppNavigation(navController: NavHostController = rememberNavController()) {
         }
 
         composable(Routes.NOTIFICATIONS) {
-            PlaceholderScreen("Notifications", "Gabi") { navController.popBackStack() }
+            NotificationsScreen(onBack = { navController.popBackStack() })
         }
 
         composable(
@@ -179,14 +198,26 @@ fun AppNavigation(navController: NavHostController = rememberNavController()) {
             PetProfileScreen(
                 petName = entry.arguments?.getString("petName").orEmpty(),
                 onBack = { navController.popBackStack() },
-                onVaccinationHistory = { navController.navigate(Routes.VACCINATION_HISTORY) },
+                onVaccinationHistory = {
+                    navController.navigate(Routes.vaccinationHistory(entry.arguments?.getString("petName")))
+                },
                 onMedicalHistory = { navController.navigate(Routes.MEDICAL_HISTORY) },
                 onBookAppointment = { navController.navigate(Routes.BOOK_APPOINTMENT) }
             )
         }
 
-        composable(Routes.VACCINATION_HISTORY) {
-            PlaceholderScreen("Vaccination history", "the team") { navController.popBackStack() }
+        composable(
+            route = Routes.VACCINATION_HISTORY,
+            arguments = listOf(navArgument("petName") {
+                type = NavType.StringType
+                defaultValue = "Charlie"
+            })
+        ) { entry ->
+            VaccinationHistoryScreen(
+                petName = entry.arguments?.getString("petName") ?: "Charlie",
+                onBack = { navController.popBackStack() },
+                onBookAppointment = { navController.navigate(Routes.BOOK_APPOINTMENT) }
+            )
         }
 
         composable(Routes.ADD_PET) {
@@ -194,7 +225,10 @@ fun AppNavigation(navController: NavHostController = rememberNavController()) {
         }
 
         composable(Routes.BOOK_APPOINTMENT) {
-            PlaceholderScreen("Book appointment", "Gabi") { navController.popBackStack() }
+            BookAppointmentScreen(
+                onBack = { navController.popBackStack() },
+                onConfirm = { _, _, _, _ -> navController.popBackStack() }
+            )
         }
 
         composable(Routes.MY_APPOINTMENTS) {
@@ -236,7 +270,14 @@ fun AppNavigation(navController: NavHostController = rememberNavController()) {
         }
 
         composable(Routes.DASHBOARD) {
-            PlaceholderScreen("Dashboard", "Gabi") { navController.popBackStack() }
+            DashboardScreen(
+                onNotificationsClick = { navController.navigate(Routes.NOTIFICATIONS) },
+                onAppointmentClick = { navController.navigate(Routes.APPOINTMENT_DETAIL) },
+                onRegisterPet = { navController.navigate(Routes.PET_FORM) },
+                onOwners = { navController.navigate(Routes.OWNER_LIST) },
+                onVaccinationRecord = { navController.navigate(Routes.VACCINATION_RECORD) },
+                onNavigate = { index -> navController.navigateTab(vetTabRoute(index), VET_START) }
+            )
         }
 
         composable(Routes.APPOINTMENT_SCHEDULE) {
@@ -250,7 +291,7 @@ fun AppNavigation(navController: NavHostController = rememberNavController()) {
         composable(Routes.APPOINTMENT_DETAIL) {
             AppointmentDetailScreen(
                 onBack = { navController.popBackStack() },
-                onViewOwner = { navController.navigate(Routes.OWNER_DETAIL) },
+                onViewOwner = { navController.navigate(Routes.ownerDetail()) },
                 onStartConsultation = { petName, petBreed, ownerName ->
                     navController.navigate(Routes.newConsultation(petName, petBreed, ownerName))
                 },
@@ -261,12 +302,25 @@ fun AppNavigation(navController: NavHostController = rememberNavController()) {
         composable(Routes.OWNER_LIST) {
             OwnerListScreen(
                 onBack = { navController.popBackStack() },
-                onOwnerClick = { navController.navigate(Routes.OWNER_DETAIL) }
+                onOwnerClick = { owner -> navController.navigate(Routes.ownerDetail(owner.name)) }
             )
         }
 
-        composable(Routes.OWNER_DETAIL) {
-            PlaceholderScreen("Owner detail", "the team") { navController.popBackStack() }
+        composable(
+            route = Routes.OWNER_DETAIL,
+            arguments = listOf(navArgument("ownerName") {
+                type = NavType.StringType
+                defaultValue = "Sarah Johnson"
+            })
+        ) { entry ->
+            val ownerName = entry.arguments?.getString("ownerName") ?: "Sarah Johnson"
+            OwnerDetailScreen(
+                ownerName = ownerName,
+                onBack = { navController.popBackStack() },
+                onPetClick = { petName, petBreed ->
+                    navController.navigate(Routes.newConsultation(petName, petBreed, ownerName))
+                }
+            )
         }
 
         composable(Routes.VACCINATION_RECORD) {
