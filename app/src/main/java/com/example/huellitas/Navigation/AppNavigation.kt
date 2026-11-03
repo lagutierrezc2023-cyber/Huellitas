@@ -17,17 +17,22 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.vetclinic.app.ui.components.ScreenHeader
 import com.vetclinic.app.ui.screens.auth.LoginScreen
+import com.vetclinic.app.ui.screens.auth.RegisterOwnerScreen
+import com.vetclinic.app.ui.screens.common.ProfileScreen
 import com.vetclinic.app.ui.screens.common.SettingsScreen
 import com.vetclinic.app.ui.screens.owner.HomeScreen
 import com.vetclinic.app.ui.screens.owner.MyPetsScreen
+import com.vetclinic.app.ui.screens.owner.PetProfileScreen
+import com.vetclinic.app.ui.screens.veterinary.AppointmentDetailScreen
 import com.vetclinic.app.ui.screens.veterinary.NewConsultationScreen
+import com.vetclinic.app.ui.screens.veterinary.OwnerListScreen
 import com.vetclinic.app.ui.screens.veterinary.PetListScreen
+import com.vetclinic.app.ui.screens.veterinary.VaccinationRecordScreen
 import com.vetclinic.app.ui.theme.VetColors
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-/*  Rutas de las 24 pantallas  */
 
 object Routes {
     // Auth
@@ -35,14 +40,10 @@ object Routes {
     const val LOGIN = "login"
     const val FORGOT_PASSWORD = "forgot_password"
     const val REGISTER_OWNER = "register_owner"
-
-    // Common
     const val SETTINGS = "settings"
     const val NOTIFICATIONS = "notifications"
     const val MEDICAL_HISTORY = "medical_history"
-    const val PROFILE = "profile"
-
-    // Owner
+    const val PROFILE = "profile?isVet={isVet}"
     const val HOME = "home"
     const val MY_PETS = "my_pets"
     const val BOOK_APPOINTMENT = "book_appointment"
@@ -50,8 +51,6 @@ object Routes {
     const val ADD_PET = "add_pet"
     const val MY_APPOINTMENTS = "my_appointments"
     const val PET_PROFILE = "pet_profile/{petName}"
-
-    // Veterinary
     const val PET_LIST = "pet_list"
     const val NEW_CONSULTATION = "new_consultation/{petName}/{petBreed}/{ownerName}"
     const val DASHBOARD = "dashboard"
@@ -62,29 +61,26 @@ object Routes {
     const val OWNER_LIST = "owner_list"
     const val VACCINATION_RECORD = "vaccination_record"
 
-    //Funciones para armar rutas que llevan datos
     fun petProfile(petName: String) = "pet_profile/${Uri.encode(petName)}"
     fun newConsultation(petName: String, petBreed: String, ownerName: String) =
         "new_consultation/${Uri.encode(petName)}/${Uri.encode(petBreed)}/${Uri.encode(ownerName)}"
+    fun profile(isVet: Boolean) = "profile?isVet=$isVet"
 }
 
 private const val OWNER_START = Routes.HOME
 private const val VET_START = Routes.PET_LIST
 
-/*  Grafo de navegación */
 
 @Composable
 fun AppNavigation(navController: NavHostController = rememberNavController()) {
 
     NavHost(navController = navController, startDestination = Routes.LOGIN) {
 
-        /* ===== AUTH ===== */
 
         composable(Routes.LOGIN) {
             LoginScreen(
                 onLogin = { email, _ ->
-                    // DEMO: si el correo termina en @clinic.com entra como veterinario,
-                    // si no, entra como dueño. Luego se reemplaza por validación real (Room / Firebase).
+
                     val destination =
                         if (email.trim().endsWith("@clinic.com", ignoreCase = true)) VET_START else OWNER_START
                     navController.navigate(destination) {
@@ -101,15 +97,22 @@ fun AppNavigation(navController: NavHostController = rememberNavController()) {
         }
 
         composable(Routes.REGISTER_OWNER) {
-            PlaceholderScreen("Register", "Ashley") { navController.popBackStack() }
-        }
+            RegisterOwnerScreen(
+                onBack = { navController.popBackStack() },
+                onRegister = { _, _, _, _ ->
 
-        /* ===== COMMON ===== */
+                    navController.navigate(OWNER_START) {
+                        popUpTo(Routes.LOGIN) { inclusive = true }
+                    }
+                },
+                onSignIn = { navController.popBackStack() }
+            )
+        }
 
         composable(Routes.SETTINGS) {
             SettingsScreen(
                 onBack = { navController.popBackStack() },
-                onProfileClick = { navController.navigate(Routes.PROFILE) },
+                onProfileClick = { navController.navigate(Routes.profile(isVet = false)) },
                 onLogout = {
                     navController.navigate(Routes.LOGIN) {
                         popUpTo(navController.graph.id) { inclusive = true }
@@ -122,11 +125,33 @@ fun AppNavigation(navController: NavHostController = rememberNavController()) {
             PlaceholderScreen("Notifications", "Gabi") { navController.popBackStack() }
         }
 
-        composable(Routes.PROFILE) {
-            PlaceholderScreen("Profile", "Ashley") { navController.popBackStack() }
+        composable(
+            route = Routes.PROFILE,
+            arguments = listOf(navArgument("isVet") {
+                type = NavType.BoolType
+                defaultValue = false
+            })
+        ) { entry ->
+            val isVet = entry.arguments?.getBoolean("isVet") ?: false
+            ProfileScreen(
+                isVet = isVet,
+                onBack = { navController.popBackStack() },
+                onSettingsClick = { navController.navigate(Routes.SETTINGS) },
+                onNavigate = { index ->
+                    if (isVet) navController.navigateTab(vetTabRoute(index), VET_START)
+                    else navController.navigateTab(ownerTabRoute(index), OWNER_START)
+                },
+                onLogout = {
+                    navController.navigate(Routes.LOGIN) {
+                        popUpTo(navController.graph.id) { inclusive = true }
+                    }
+                }
+            )
         }
 
-        /* ===== OWNER ===== */
+        composable(Routes.MEDICAL_HISTORY) {
+            PlaceholderScreen("Medical history", "the team") { navController.popBackStack() }
+        }
 
         composable(Routes.HOME) {
             HomeScreen(
@@ -151,8 +176,17 @@ fun AppNavigation(navController: NavHostController = rememberNavController()) {
             route = Routes.PET_PROFILE,
             arguments = listOf(navArgument("petName") { type = NavType.StringType })
         ) { entry ->
-            val petName = entry.arguments?.getString("petName").orEmpty()
-            PlaceholderScreen("Pet profile — $petName", "Ashley") { navController.popBackStack() }
+            PetProfileScreen(
+                petName = entry.arguments?.getString("petName").orEmpty(),
+                onBack = { navController.popBackStack() },
+                onVaccinationHistory = { navController.navigate(Routes.VACCINATION_HISTORY) },
+                onMedicalHistory = { navController.navigate(Routes.MEDICAL_HISTORY) },
+                onBookAppointment = { navController.navigate(Routes.BOOK_APPOINTMENT) }
+            )
+        }
+
+        composable(Routes.VACCINATION_HISTORY) {
+            PlaceholderScreen("Vaccination history", "the team") { navController.popBackStack() }
         }
 
         composable(Routes.ADD_PET) {
@@ -212,54 +246,80 @@ fun AppNavigation(navController: NavHostController = rememberNavController()) {
         composable(Routes.PET_FORM) {
             PlaceholderScreen("New pet", "Jennifer") { navController.popBackStack() }
         }
+
+        composable(Routes.APPOINTMENT_DETAIL) {
+            AppointmentDetailScreen(
+                onBack = { navController.popBackStack() },
+                onViewOwner = { navController.navigate(Routes.OWNER_DETAIL) },
+                onStartConsultation = { petName, petBreed, ownerName ->
+                    navController.navigate(Routes.newConsultation(petName, petBreed, ownerName))
+                },
+                onCancel = { navController.popBackStack() }
+            )
+        }
+
+        composable(Routes.OWNER_LIST) {
+            OwnerListScreen(
+                onBack = { navController.popBackStack() },
+                onOwnerClick = { navController.navigate(Routes.OWNER_DETAIL) }
+            )
+        }
+
+        composable(Routes.OWNER_DETAIL) {
+            PlaceholderScreen("Owner detail", "the team") { navController.popBackStack() }
+        }
+
+        composable(Routes.VACCINATION_RECORD) {
+            VaccinationRecordScreen(
+                onBack = { navController.popBackStack() },
+                onSave = { _ -> navController.popBackStack() }
+            )
+        }
     }
 }
 
-    /*  Pestañas de la barra inferior  */
 
-    private fun ownerTabRoute(index: Int) = when (index) {
-        0 -> Routes.HOME
-        1 -> Routes.MY_PETS
-        2 -> Routes.MY_APPOINTMENTS
-        else -> Routes.SETTINGS // cambiar a Routes.PROFILE cuando Ashley tenga su pantalla
+private fun ownerTabRoute(index: Int) = when (index) {
+    0 -> Routes.HOME
+    1 -> Routes.MY_PETS
+    2 -> Routes.MY_APPOINTMENTS
+    else -> Routes.profile(isVet = false)
+}
+
+private fun vetTabRoute(index: Int) = when (index) {
+    0 -> Routes.DASHBOARD
+    1 -> Routes.PET_LIST
+    2 -> Routes.APPOINTMENT_SCHEDULE
+    else -> Routes.profile(isVet = true)
+}
+
+private fun NavHostController.navigateTab(route: String, startRoute: String) {
+    if (currentDestination?.route == route) return
+    navigate(route) {
+        popUpTo(startRoute) { saveState = true }
+        launchSingleTop = true
+        restoreState = true
     }
+}
 
+/*  Pantalla temporal */
 
-    private fun vetTabRoute(index: Int) = when (index) {
-        0 -> Routes.DASHBOARD
-        1 -> Routes.PET_LIST
-        2 -> Routes.APPOINTMENT_SCHEDULE
-        else -> Routes.SETTINGS // cambiar a Routes.PROFILE cuando Ashley tenga su pantalla
+@Composable
+private fun PlaceholderScreen(title: String, assignedTo: String, onBack: () -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(VetColors.Background)
+            .padding(horizontal = 20.dp, vertical = 24.dp)
+    ) {
+        ScreenHeader(title = title, onBack = onBack)
+        Spacer(Modifier.weight(1f))
+        Text(
+            text = "Coming soon — assigned to $assignedTo",
+            color = VetColors.TextSecondary,
+            fontSize = 15.sp,
+            modifier = Modifier.align(Alignment.CenterHorizontally)
+        )
+        Spacer(Modifier.weight(1f))
     }
-
-    // Cambia de pestaña sin ir acumulando pantallas en el historial
-    private fun NavHostController.navigateTab(route: String, startRoute: String) {
-        if (currentDestination?.route == route) return
-        navigate(route) {
-            popUpTo(startRoute) { saveState = true }
-            launchSingleTop = true
-            restoreState = true
-        }
-    }
-
-    /*  Pantalla temporal para las vistas de los compañeros  */
-
-    @Composable
-    private fun PlaceholderScreen(title: String, assignedTo: String, onBack: () -> Unit) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(VetColors.Background)
-                .padding(horizontal = 20.dp, vertical = 24.dp)
-        ) {
-            ScreenHeader(title = title, onBack = onBack)
-            Spacer(Modifier.weight(1f))
-            Text(
-                text = "Coming soon — assigned to $assignedTo",
-                color = VetColors.TextSecondary,
-                fontSize = 15.sp,
-                modifier = Modifier.align(Alignment.CenterHorizontally)
-            )
-            Spacer(Modifier.weight(1f))
-        }
-    }
+}
